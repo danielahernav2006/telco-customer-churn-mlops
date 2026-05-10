@@ -1,176 +1,316 @@
 # Predicción de Churn en Telecomunicaciones con Machine Learning y MLOps
 
-Proyecto académico que aplica el ciclo completo de Machine Learning —desde el análisis exploratorio hasta la puesta en producción— sobre el dataset **Telco Customer Churn**, con el objetivo de predecir la fuga (abandono) de clientes en una empresa de telecomunicaciones.
-
-El proyecto incluye una arquitectura básica de **MLOps**: el modelo final se sirve mediante una API REST con FastAPI, se empaqueta en una imagen Docker y se valida automáticamente con un pipeline de CI/CD en GitHub Actions.
+Proyecto académico de Machine Learning aplicado al dataset **Telco Customer Churn**, cuyo objetivo es predecir la probabilidad de abandono de clientes en una empresa de telecomunicaciones. El proyecto integra el ciclo completo de trabajo: análisis exploratorio, preprocesamiento, entrenamiento de modelos, evaluación, interpretabilidad, despliegue mediante API, contenerización con Docker, pruebas automáticas, CI/CD y monitoreo de deriva de datos.
 
 ---
 
-## 1. Descripción
+## 1. Descripción general
 
-El proyecto desarrolla un modelo supervisado de clasificación binaria para predecir si un cliente abandonará la compañía. Se entrenan y comparan cuatro modelos basados en árboles (Random Forest, XGBoost, CatBoost y LightGBM), se selecciona el mejor según ROC AUC en validación cruzada estratificada, y se expone el modelo final como un servicio web reproducible y desplegable.
+El proyecto desarrolla un modelo supervisado de clasificación binaria para predecir si un cliente realizará **churn** (`Yes`) o permanecerá en la compañía (`No`). Se entrenaron y compararon modelos basados en árboles: **Random Forest**, **XGBoost**, **CatBoost** y **LightGBM**. El modelo final seleccionado fue **CatBoost**, al obtener el mejor desempeño promedio en validación cruzada según la métrica **ROC AUC**.
+
+Además del desarrollo analítico, el proyecto implementa una arquitectura básica de **MLOps**, compuesta por:
+
+- API de inferencia con **FastAPI**.
+- Validación de datos con **Pydantic**.
+- Modelo serializado en `app/model.joblib`.
+- Contenedor **Docker** para ejecutar la API en un entorno reproducible.
+- Pruebas unitarias con **pytest**.
+- Flujo **CI/CD con GitHub Actions**.
+- Monitoreo propuesto de deriva de datos mediante **Evidently AI**.
+- Publicación del notebook como **Jupyter Book**.
+
+---
 
 ## 2. Problema de negocio
 
-La retención de clientes es una de las palancas de mayor impacto financiero en el sector de telecomunicaciones: adquirir un cliente nuevo cuesta varias veces más que conservar uno existente. Anticipar qué clientes están en riesgo de abandono permite al equipo comercial diseñar acciones de retención focalizadas (ofertas, descuentos, contacto proactivo) en lugar de aplicar campañas masivas de baja eficiencia.
+En el sector de telecomunicaciones, anticipar la pérdida de clientes permite diseñar estrategias de retención más eficientes. Un modelo de churn ayuda a identificar clientes con alta probabilidad de abandono y permite tomar decisiones preventivas, como campañas focalizadas, revisión de contratos, beneficios personalizados o atención prioritaria.
+
+---
 
 ## 3. Dataset
 
-Se utiliza el dataset **Telco Customer Churn**, que contiene 7 043 registros y 21 columnas con información de clientes individuales:
+Se utiliza el dataset **Telco Customer Churn**, con **7.043 registros** y **21 columnas**. Cada fila representa un cliente y contiene información demográfica, contractual, de servicios y facturación.
 
-- **Demográficas**: `gender`, `SeniorCitizen`, `Partner`, `Dependents`.
-- **Servicio telefónico e internet**: `PhoneService`, `MultipleLines`, `InternetService`, `OnlineSecurity`, `OnlineBackup`, `DeviceProtection`, `TechSupport`, `StreamingTV`, `StreamingMovies`.
-- **Contractuales y de facturación**: `Contract`, `PaperlessBilling`, `PaymentMethod`, `tenure`, `MonthlyCharges`, `TotalCharges`.
-- **Variable objetivo**: `Churn` (`Yes`/`No`, codificada a `1`/`0`).
+Variables principales:
 
-## 4. Objetivo
+- **Demográficas:** `gender`, `SeniorCitizen`, `Partner`, `Dependents`.
+- **Servicios contratados:** `PhoneService`, `MultipleLines`, `InternetService`, `OnlineSecurity`, `OnlineBackup`, `DeviceProtection`, `TechSupport`, `StreamingTV`, `StreamingMovies`.
+- **Contrato y facturación:** `Contract`, `PaperlessBilling`, `PaymentMethod`, `tenure`, `MonthlyCharges`, `TotalCharges`.
+- **Variable objetivo:** `Churn`, con valores `Yes` y `No`.
 
-1. Construir un modelo que prediga la probabilidad de que un cliente abandone la compañía.
-2. Diseñar e implementar una arquitectura básica de MLOps que permita servir el modelo de forma reproducible, automatizada y monitoreable.
+---
 
-## 5. Análisis exploratorio (EDA) — hallazgos principales
+## 4. Objetivos
 
-- **Desbalance moderado de clases**: `Churn = No` ≈ 73.46 %, `Churn = Yes` ≈ 26.54 %.
-- Se eliminó `customerID` por ser un identificador sin valor predictivo.
-- `TotalCharges` se convirtió a numérica e imputó con `0` para los **11 registros vacíos**, todos correspondientes a clientes con `tenure = 0`.
-- **Mayor churn en contratos `Month-to-month`** que en contratos a uno o dos años.
-- **Mayor churn en clientes nuevos** (tenure bajo).
-- **Mayor churn en clientes con `InternetService = Fiber optic`**.
-- **Mayor churn en clientes que pagan con `Electronic check`**.
-- Relación clara entre **cargos mensuales altos** (`MonthlyCharges`) y mayor probabilidad de abandono.
-- La ausencia de servicios complementarios como `OnlineSecurity` y `TechSupport` también está asociada a un mayor churn.
+1. Desarrollar modelos de clasificación para predecir la probabilidad de abandono de clientes.
+2. Comparar distintos modelos basados en árboles usando métricas de clasificación.
+3. Seleccionar el mejor modelo con base en ROC AUC en validación cruzada.
+4. Explicar las variables más importantes y predicciones individuales mediante interpretabilidad.
+5. Implementar una arquitectura MLOps básica para servir el modelo mediante API.
+6. Empaquetar la API y el modelo en Docker.
+7. Automatizar validaciones con GitHub Actions.
+8. Proponer mecanismos de monitoreo de deriva y desempeño en producción.
 
-## 6. Modelos entrenados
+---
 
-Todos los modelos se entrenaron como `Pipeline` de scikit-learn (preprocesamiento + estimador), con partición estratificada 80/20 y validación cruzada estratificada de 5 folds. La búsqueda de hiperparámetros se realizó con `GridSearchCV` y la métrica principal de selección fue **ROC AUC**.
+## 5. Análisis exploratorio de datos
 
-| Modelo         | Accuracy | Precision | Recall | F1     | ROC AUC (Test) | ROC AUC (CV) |
-| -------------- | -------- | --------- | ------ | ------ | -------------- | ------------ |
-| Random Forest  | 0.7701   | 0.5490    | 0.7487 | 0.6335 | 0.8418         | 0.8468       |
-| XGBoost        | 0.7445   | 0.5119    | 0.8021 | 0.6250 | 0.8482         | 0.8500       |
-| **CatBoost**   | 0.7445   | 0.5120    | 0.7995 | 0.6242 | 0.8461         | **0.8506**   |
-| LightGBM       | 0.7580   | 0.5297    | 0.7861 | 0.6329 | 0.8448         | 0.8467       |
+Hallazgos principales:
 
-## 7. Modelo seleccionado
+- La variable objetivo presenta un desbalance moderado:
+  - `Churn = No`: aproximadamente **73,46 %**.
+  - `Churn = Yes`: aproximadamente **26,54 %**.
+- Se eliminó `customerID` porque es un identificador sin valor predictivo.
+- La variable `TotalCharges` fue convertida a numérica. Se identificaron 11 valores vacíos, asociados a clientes con `tenure = 0`, por lo cual fueron imputados con `0`.
+- Los clientes con contrato `Month-to-month` presentan mayor tasa de abandono.
+- Los clientes con baja antigüedad (`tenure` bajo) tienen mayor riesgo de churn.
+- El servicio `Fiber optic` aparece asociado a una mayor proporción de abandono.
+- El método de pago `Electronic check` se relaciona con mayor churn.
+- Cargos mensuales altos (`MonthlyCharges`) se asocian con mayor probabilidad de abandono.
+- La ausencia de servicios como `OnlineSecurity` y `TechSupport` también incrementa el riesgo de churn.
 
-Se seleccionó **CatBoost** como modelo final porque obtuvo el mayor **ROC AUC promedio en validación cruzada (0.8506)**, métrica más robusta frente al partido único de test y mejor indicador de la capacidad de generalización del modelo en este problema con clases desbalanceadas.
+---
 
-El modelo final, junto con su preprocesamiento, está serializado como un único `Pipeline` de scikit-learn en `app/model.joblib`.
+## 6. Preprocesamiento
 
-## 8. Interpretabilidad
+El preprocesamiento se implementó mediante un `ColumnTransformer` dentro de un `Pipeline` de scikit-learn.
 
-Para explicar las decisiones del modelo se aplicaron dos enfoques:
+Transformaciones aplicadas:
 
-- **Importancia global de variables**: usando la importancia nativa de los modelos de árboles, se identificaron consistentemente las siguientes variables como las más relevantes:
-  - `tenure`
-  - `Contract_Month-to-month`
-  - `Contract_Two year`
-  - `InternetService_Fiber optic`
-  - `PaymentMethod_Electronic check`
-  - `MonthlyCharges`
-  - `TotalCharges`
-  - `OnlineSecurity`
-  - `TechSupport`
+- Variables numéricas:
+  - Imputación con mediana.
+  - Escalado con `StandardScaler`.
+- Variables categóricas:
+  - Imputación con la categoría más frecuente.
+  - Codificación con `OneHotEncoder(handle_unknown="ignore")`.
 
-- **LIME (Local Interpretable Model-agnostic Explanations)**: se generaron explicaciones locales para tres clientes representativos (alto riesgo, bajo riesgo y zona incierta), confirmando que las variables anteriores son las que más empujan la predicción individual hacia el churn o la retención.
+Variables numéricas principales:
 
-## 9. Arquitectura MLOps
+- `tenure`
+- `MonthlyCharges`
+- `TotalCharges`
 
-El flujo de extremo a extremo del proyecto es el siguiente:
+Las demás variables predictoras fueron tratadas como categóricas, incluyendo `SeniorCitizen`.
 
+---
+
+## 7. Modelos entrenados
+
+Se entrenaron cuatro modelos basados en árboles, todos integrados en `Pipeline` con preprocesamiento y optimizados mediante `GridSearchCV`.
+
+La validación se realizó con **validación cruzada estratificada de 5 particiones**, usando como métrica principal **ROC AUC**.
+
+| Modelo        | Accuracy | Precision | Recall | F1-score | ROC AUC Test | ROC AUC CV |
+|--------------|---------:|----------:|-------:|---------:|-------------:|-----------:|
+| Random Forest | 0.7701 | 0.5490 | 0.7487 | 0.6335 | 0.8418 | 0.8468 |
+| XGBoost       | 0.7445 | 0.5119 | 0.8021 | 0.6250 | 0.8482 | 0.8500 |
+| **CatBoost**  | 0.7445 | 0.5120 | 0.7995 | 0.6242 | 0.8461 | **0.8506** |
+| LightGBM      | 0.7580 | 0.5297 | 0.7861 | 0.6329 | 0.8448 | 0.8467 |
+
+---
+
+## 8. Modelo seleccionado
+
+El modelo seleccionado fue **CatBoost**, porque obtuvo el mayor **ROC AUC promedio en validación cruzada: 0.8506**.
+
+Aunque XGBoost obtuvo el mejor ROC AUC en test y Random Forest presentó el mejor F1-score, CatBoost fue elegido por su mejor desempeño promedio en validación cruzada, lo cual ofrece una evaluación más estable de su capacidad de generalización.
+
+El modelo final se guardó como un único `Pipeline` en:
+
+```text
+app/model.joblib
 ```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Datos      │ -> │ Entrenamiento│ -> │ Modelo       │ -> │ API FastAPI  │
-│ (CSV crudo)  │    │  (notebooks) │    │ (model.joblib│    │ (/predict)   │
-└──────────────┘    └──────────────┘    └──────────────┘    └──────┬───────┘
-                                                                   │
-                          ┌────────────────────────────────────────┘
-                          v
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  Pruebas     │ -> │  GitHub      │ -> │   Docker     │ -> │  Monitoreo   │
-│  (pytest)    │    │  Actions CI  │    │  (imagen)    │    │ (producción) │
-└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+
+Este archivo incluye el preprocesamiento y el clasificador final, por lo que la API puede recibir los datos originales del cliente en formato tabular sin codificación manual adicional.
+
+---
+
+## 9. Interpretabilidad
+
+Se utilizaron dos enfoques de interpretabilidad:
+
+### 9.1. Importancia global de variables
+
+Las variables más relevantes identificadas de forma recurrente fueron:
+
+- `tenure`
+- `Contract_Month-to-month`
+- `Contract_Two year`
+- `InternetService_Fiber optic`
+- `PaymentMethod_Electronic check`
+- `MonthlyCharges`
+- `TotalCharges`
+- `OnlineSecurity`
+- `TechSupport`
+
+### 9.2. LIME
+
+Se aplicó **LIME** sobre tres casos representativos:
+
+- Cliente de alto riesgo.
+- Cliente de bajo riesgo.
+- Cliente en zona incierta.
+
+Las explicaciones locales confirmaron que las predicciones están fuertemente influenciadas por variables como el tipo de contrato, la antigüedad, el método de pago, el tipo de servicio de internet y los cargos mensuales.
+
+---
+
+## 10. Arquitectura MLOps implementada
+
+La arquitectura MLOps convierte el modelo entrenado en un servicio de inferencia reproducible.
+
+Flujo general:
+
+```text
+Datos originales
+     ↓
+EDA y preprocesamiento
+     ↓
+Entrenamiento y comparación de modelos
+     ↓
+Selección del modelo CatBoost
+     ↓
+Serialización del Pipeline en app/model.joblib
+     ↓
+API FastAPI con endpoint /predict
+     ↓
+Pruebas unitarias con pytest
+     ↓
+Contenerización con Docker
+     ↓
+CI/CD con GitHub Actions
+     ↓
+Monitoreo de deriva y métricas de producción
 ```
 
-- **Datos** crudos en `data/telco_churn.csv`.
-- **Entrenamiento** y selección de hiperparámetros en los notebooks numerados.
-- **Modelo final** persistido como `Pipeline` completo en `app/model.joblib`.
-- **API FastAPI** (`app/api.py`) que carga el modelo en memoria y expone los endpoints `/`, `/health` y `/predict`.
-- **Pruebas unitarias** (`tests/test_api.py`, `tests/test_model.py`) ejecutadas con `pytest`.
-- **CI/CD** con GitHub Actions: linting con `flake8`, pruebas con `pytest` y construcción/validación de la imagen Docker.
-- **Docker**: la API se empaqueta en una imagen reproducible que escucha en el puerto `8000`.
-- **Monitoreo** propuesto para producción (ver sección 16).
+Componentes implementados:
 
-## 10. Estructura del repositorio
+- `app/api.py`: servicio FastAPI.
+- `app/schemas.py`: esquemas Pydantic para validar entrada y salida.
+- `app/model.joblib`: modelo final serializado.
+- `tests/`: pruebas unitarias de API y modelo.
+- `Dockerfile`: configuración del contenedor.
+- `.github/workflows/ci.yml`: pipeline de integración continua.
+- `monitoring/data_drift_report.py`: generación de reporte de deriva de datos.
+- `book/`: Jupyter Book del proyecto.
 
-```
+---
+
+## 11. Estructura actual del repositorio
+
+```text
 telco-churn-mlops/
+├── _build/                         # Construcción local del Jupyter Book
 ├── app/
-│   ├── api.py             # Servicio FastAPI
-│   ├── schemas.py         # Esquemas Pydantic (entrada/salida)
-│   └── model.joblib       # Pipeline (preprocesador + CatBoost)
+│   ├── __init__.py
+│   ├── api.py                      # API FastAPI
+│   ├── schemas.py                  # Esquemas Pydantic
+│   └── model.joblib                # Modelo final CatBoost en Pipeline
+├── book/
+│   ├── _config.yml                 # Configuración del Jupyter Book
+│   ├── _toc.yml                    # Tabla de contenido del Jupyter Book
+│   ├── Proyecto_Final_Telco_Churn_MLOps.ipynb
+│   └── images/                     # Recursos gráficos del libro, si aplica
 ├── data/
 │   ├── telco_churn.csv
-│   ├── X_train.joblib / X_test.joblib
-│   ├── y_train.joblib / y_test.joblib
+│   ├── X_train.joblib
+│   ├── X_test.joblib
+│   ├── y_train.joblib
+│   ├── y_test.joblib
 │   ├── preprocessor.joblib
-│   ├── mejor_rf.joblib / mejor_xgb.joblib
-│   ├── mejor_cat.joblib / mejor_lgbm.joblib
-│   └── fig_*.png          # Gráficas de importancia y LIME
+│   ├── mejor_rf.joblib
+│   ├── mejor_xgb.joblib
+│   ├── mejor_cat.joblib
+│   ├── mejor_lgbm.joblib
+│   ├── drift_report.html           # Reporte de deriva generado con Evidently
+│   └── fig_*.png                   # Figuras del análisis e interpretabilidad
+├── monitoring/
+│   └── data_drift_report.py        # Script para monitoreo de deriva
 ├── notebooks/
 │   ├── 1_eda_preprocessing.ipynb
 │   ├── 2_model_training.ipynb
-│   └── 3_interpretability.ipynb
+│   ├── 3_interpretability.ipynb
+│   └── Proyecto_Final_Telco_Churn_MLOps.ipynb
 ├── tests/
+│   ├── conftest.py
 │   ├── test_api.py
 │   └── test_model.py
-├── .github/workflows/
-│   └── ci.yml             # Pipeline CI/CD
+├── .github/
+│   └── workflows/
+│       └── ci.yml                  # Flujo CI/CD
 ├── Dockerfile
-├── requirements.txt
-└── README.md
+├── README.md
+└── requirements.txt
 ```
 
-## 11. Instalación local
+---
 
-Se recomienda usar **Python 3.10** y un entorno virtual aislado.
+## 12. Instalación local
+
+Se recomienda usar **Python 3.10**.
 
 ```bash
-# Clonar el repositorio
-git clone <url-del-repo>
+git clone <url-del-repositorio>
 cd telco-churn-mlops
 
-# Crear y activar entorno virtual
 python -m venv venv
-source venv/bin/activate          # Linux / macOS
-# venv\Scripts\activate           # Windows
+source venv/bin/activate      # Linux/macOS
+# venv\Scripts\activate       # Windows
 
-# Instalar dependencias
 pip install -r requirements.txt
 ```
 
-## 12. Ejecutar la API en local
+En caso de usar Conda:
+
+```bash
+conda create -n telco_mlops python=3.10 -y
+conda activate telco_mlops
+pip install -r requirements.txt
+```
+
+---
+
+## 13. Ejecutar la API localmente con Uvicorn
+
+Durante el desarrollo, la API puede ejecutarse localmente con Uvicorn:
 
 ```bash
 uvicorn app.api:app --reload --port 8000
 ```
 
-Una vez arrancada, la documentación interactiva de Swagger está disponible en:
+Luego se puede abrir la documentación interactiva en:
 
-- <http://localhost:8000/docs>
-- <http://localhost:8000/redoc>
+```text
+http://localhost:8000/docs
+```
 
-## 13. Probar el endpoint `/predict`
+También se puede consultar el estado del servicio en:
 
-### 13.1. Entrada (JSON)
+```text
+http://localhost:8000/health
+```
+
+---
+
+## 14. Endpoint de predicción
+
+El endpoint principal es:
+
+```text
+POST /predict
+```
+
+Recibe un JSON con las 19 variables predictoras del cliente y devuelve la probabilidad de churn.
+
+### Ejemplo de entrada
 
 ```json
 {
   "gender": "Female",
   "SeniorCitizen": 0,
-  "Partner": "Yes",
+  "Partner": "No",
   "Dependents": "No",
-  "tenure": 5,
+  "tenure": 2,
   "PhoneService": "Yes",
   "MultipleLines": "No",
   "InternetService": "Fiber optic",
@@ -183,104 +323,181 @@ Una vez arrancada, la documentación interactiva de Swagger está disponible en:
   "Contract": "Month-to-month",
   "PaperlessBilling": "Yes",
   "PaymentMethod": "Electronic check",
-  "MonthlyCharges": 99.9,
-  "TotalCharges": 499.5
+  "MonthlyCharges": 95.5,
+  "TotalCharges": 190.0
 }
 ```
 
-### 13.2. Solicitud con `curl`
-
-```bash
-curl -X POST "http://localhost:8000/predict" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "gender": "Female",
-    "SeniorCitizen": 0,
-    "Partner": "Yes",
-    "Dependents": "No",
-    "tenure": 5,
-    "PhoneService": "Yes",
-    "MultipleLines": "No",
-    "InternetService": "Fiber optic",
-    "OnlineSecurity": "No",
-    "OnlineBackup": "No",
-    "DeviceProtection": "No",
-    "TechSupport": "No",
-    "StreamingTV": "Yes",
-    "StreamingMovies": "Yes",
-    "Contract": "Month-to-month",
-    "PaperlessBilling": "Yes",
-    "PaymentMethod": "Electronic check",
-    "MonthlyCharges": 99.9,
-    "TotalCharges": 499.5
-  }'
-```
-
-### 13.3. Respuesta esperada
+### Ejemplo de respuesta
 
 ```json
 {
-  "churn_probability": 0.9231,
+  "churn_probability": 0.86,
   "prediction": "Yes",
   "threshold": 0.5,
   "model_name": "CatBoost"
 }
 ```
 
-## 14. Ejecutar la API con Docker
+Interpretación:
+
+- `churn_probability`: probabilidad estimada de que el cliente abandone la compañía.
+- `prediction`: clasificación final según el umbral.
+- `threshold`: punto de corte usado para clasificar.
+- `model_name`: modelo utilizado por la API.
+
+---
+
+## 15. Diferencia entre Uvicorn y Docker
+
+**Uvicorn** ejecuta la API directamente en el entorno local de desarrollo. Es útil para probar rápidamente la API desde el computador.
+
+**Docker** empaqueta la API, el modelo y las dependencias en un contenedor. Esto permite que el proyecto se ejecute de forma reproducible en otros equipos o servidores, sin depender de la configuración local.
+
+Aunque en ambos casos se visualiza la misma documentación de FastAPI en `http://localhost:8000/docs`, la diferencia está en el entorno donde se ejecuta el servicio.
+
+---
+
+## 16. Ejecutar la API con Docker
+
+Construir la imagen:
 
 ```bash
-# Construir la imagen
 docker build -t telco-churn-api .
+```
 
-# Ejecutar el contenedor
+Ejecutar el contenedor:
+
+```bash
 docker run -p 8000:8000 telco-churn-api
 ```
 
-La API queda disponible en `http://localhost:8000`. El `Dockerfile` incluye además un `HEALTHCHECK` que valida periódicamente que `/health` responde correctamente.
+Luego abrir:
 
-## 15. Pruebas
-
-Las pruebas verifican tanto la integridad del modelo serializado como el comportamiento de la API:
-
-```bash
-pytest tests/ -v
+```text
+http://localhost:8000/docs
 ```
 
-- `tests/test_model.py`: existencia del archivo del modelo, carga con `joblib`, presencia de `predict`/`predict_proba` y predicción válida sobre un cliente de ejemplo.
-- `tests/test_api.py`: usa `TestClient` de FastAPI para validar `/`, `/health` y `/predict`, incluyendo rangos de probabilidad, etiquetas válidas, consistencia con el umbral y manejo de errores (campos faltantes y categorías inválidas).
+Nota: dentro del contenedor, Uvicorn escucha en `0.0.0.0:8000`, pero desde el navegador se debe acceder mediante `localhost:8000`.
 
-## 16. CI/CD con GitHub Actions
+---
 
-El pipeline (`.github/workflows/ci.yml`) se ejecuta en cada `push` y `pull_request` y consta de dos jobs:
+## 17. Pruebas unitarias
 
-1. **`test`** (Lint y pruebas):
-   - Configura Python 3.10.
-   - Instala dependencias desde `requirements.txt`.
-   - Ejecuta `flake8 app/ tests/` (ignorando `E501` y `W503`).
-   - Ejecuta `pytest tests/`.
-2. **`docker`** (Construcción de imagen): se ejecuta sólo si `test` pasa.
-   - Construye la imagen con `docker/build-push-action`.
-   - Levanta el contenedor y verifica que `/health` responde.
-   - Deja preparados (deshabilitados con `if: false`) los pasos de **publicación** en Docker Hub mediante los secretos `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN`.
+Ejecutar pruebas:
 
-## 17. Recomendaciones de monitoreo en producción
+```bash
+python -m pytest tests/ -v
+```
 
-Una vez desplegado el modelo, se recomienda implementar las siguientes prácticas de monitoreo:
+Las pruebas verifican:
 
-- **Deriva de datos (data drift)**: comparar periódicamente la distribución de las variables de entrada en producción contra la distribución del set de entrenamiento (test estadístico de Kolmogorov–Smirnov para numéricas, distancia Chi-cuadrado o PSI para categóricas).
-- **Distribución de las predicciones**: vigilar que la proporción de predicciones `Yes`/`No` no se aleje significativamente de la tasa base histórica (~26.5 %). Un cambio brusco suele indicar un problema en los datos o un cambio real en el negocio.
-- **Distribución de la probabilidad**: monitorear el histograma de `churn_probability` (media, mediana, percentiles 25/75/95) para detectar desplazamientos.
-- **Métricas de desempeño con etiquetas reales**: cuando se cuente con la verdad de campo (varios meses después), calcular Accuracy, Precision, Recall, F1 y ROC AUC sobre ventanas móviles.
-- **Cambios en variables de entrada**: registrar nuevos valores categóricos no vistos durante el entrenamiento, columnas faltantes y variaciones en los rangos de las numéricas.
-- **Reentrenamiento periódico**: definir una cadencia (por ejemplo trimestral) y disparadores automáticos basados en caída de métricas (p. ej. ROC AUC < 0.80) o deriva detectada.
-- **Trazabilidad**: registrar cada solicitud con un ID único, el payload, la respuesta y la versión del modelo, para poder auditar y depurar predicciones individuales.
+- Que el modelo `app/model.joblib` existe.
+- Que el modelo puede cargarse con `joblib`.
+- Que el modelo tiene métodos de predicción.
+- Que la API responde en `/`, `/health` y `/predict`.
+- Que la probabilidad retornada está entre 0 y 1.
+- Que la predicción corresponde a `Yes` o `No`.
+- Que los errores de validación se manejan correctamente.
 
-Estas piezas pueden implementarse con herramientas como **Evidently AI**, **WhyLabs**, **MLflow**, **Prometheus + Grafana** o un stack propio basado en logs estructurados.
+---
 
-## 18. Conclusiones
+## 18. CI/CD con GitHub Actions
 
-- Los cuatro modelos basados en árboles obtuvieron desempeños muy cercanos entre sí (ROC AUC entre 0.844 y 0.851), lo que sugiere que el problema está bien acotado por las variables disponibles y que la elección del estimador no es el factor diferenciador principal.
-- **CatBoost** se eligió como modelo final por su mejor ROC AUC en validación cruzada (0.8506), su robustez con variables categóricas y la consistencia de sus métricas frente a los demás candidatos.
-- Las variables más informativas (`tenure`, tipo de contrato, tipo de internet, método de pago y cargos mensuales) son interpretables desde el negocio y permiten formular hipótesis accionables: clientes nuevos, con contrato mensual, fibra óptica y pago electrónico son el segmento de mayor riesgo y deberían concentrar los esfuerzos de retención.
-- La arquitectura MLOps implementada cumple con los requisitos académicos de la asignación (servicio de inferencia, contenedor Docker, CI/CD y monitoreo propuesto) y deja una base sólida para evolucionar hacia un sistema productivo real, añadiendo registro de experimentos, versionado de modelos y monitoreo automatizado.
+El archivo `.github/workflows/ci.yml` define un flujo automático que se ejecuta en cada `push` o `pull_request`.
+
+El pipeline incluye dos jobs:
+
+### 18.1. Lint y pruebas
+
+- Configura Python 3.10.
+- Instala dependencias desde `requirements.txt`.
+- Ejecuta `flake8` sobre `app/` y `tests/`.
+- Ejecuta `pytest tests/ -v`.
+
+### 18.2. Construcción y validación Docker
+
+- Construye la imagen Docker.
+- Levanta el contenedor.
+- Verifica que el endpoint `/health` responda correctamente.
+- Detiene y elimina el contenedor.
+
+También se dejaron preparados pasos opcionales para publicar la imagen en Docker Hub, deshabilitados por defecto mediante `if: false`.
+
+---
+
+## 19. Monitoreo de deriva de datos
+
+El proyecto incluye una propuesta de monitoreo mediante **Evidently AI**. El script se encuentra en:
+
+```text
+monitoring/data_drift_report.py
+```
+
+Para generar el reporte:
+
+```bash
+python monitoring/data_drift_report.py
+```
+
+El reporte se guarda en:
+
+```text
+data/drift_report.html
+```
+
+Este reporte compara `X_train` como datos de referencia frente a `X_test` como datos actuales simulados. En un entorno real, `X_test` sería reemplazado por datos recientes recolectados en producción.
+
+Variables relevantes para monitoreo:
+
+- `tenure`
+- `MonthlyCharges`
+- `TotalCharges`
+- `Contract`
+- `InternetService`
+- `PaymentMethod`
+- `OnlineSecurity`
+- `TechSupport`
+
+Si se detecta deriva significativa, se recomienda revisar el desempeño del modelo y considerar un proceso de reentrenamiento.
+
+---
+
+## 20. Recomendaciones de monitoreo en producción
+
+En una implementación productiva se recomienda monitorear:
+
+- Distribución de variables numéricas.
+- Frecuencias de variables categóricas.
+- Porcentaje de predicciones `Yes` y `No`.
+- Distribución de `churn_probability`.
+- Número de solicitudes a la API.
+- Valores faltantes o categorías no vistas.
+- Métricas reales cuando se disponga de etiquetas posteriores: Accuracy, Precision, Recall, F1-score y ROC AUC.
+
+El reentrenamiento debe considerarse si:
+
+- La deriva de datos es significativa.
+- El ROC AUC baja frente al valor esperado.
+- El recall disminuye y el modelo deja de detectar clientes que abandonan.
+- La distribución de predicciones cambia abruptamente.
+
+---
+
+## 21. Jupyter Book
+
+El notebook final del proyecto se publicó como Jupyter Book. Link directo: https://danielahernav2006.github.io/telco-customer-churn-mlops/
+
+---
+
+## 22. Conclusiones
+
+- El proyecto permitió desarrollar un flujo completo de Machine Learning para predicción de churn, desde el análisis exploratorio hasta una arquitectura básica de despliegue.
+- Los modelos entrenados presentaron desempeños cercanos, con ROC AUC entre aproximadamente 0.84 y 0.85.
+- **CatBoost** fue seleccionado como modelo final por obtener el mejor ROC AUC en validación cruzada.
+- Los factores más asociados al churn fueron contratos mensuales, baja antigüedad, fibra óptica, pago mediante electronic check, cargos mensuales altos y ausencia de servicios de soporte o seguridad.
+- La implementación de FastAPI permite servir el modelo como API de inferencia, recibiendo datos nuevos y retornando predicciones en formato JSON.
+- Docker permite ejecutar la API en un entorno reproducible e independiente del computador local.
+- GitHub Actions automatiza pruebas, revisión de calidad del código y construcción de la imagen Docker.
+- El monitoreo de deriva de datos con Evidently fortalece la propuesta MLOps, al permitir evaluar si los datos nuevos se alejan de los datos usados para entrenar el modelo.
+- Como trabajo futuro, se recomienda incorporar registro de experimentos con MLflow, almacenamiento de logs en producción, versionado de modelos y reentrenamiento automático.
