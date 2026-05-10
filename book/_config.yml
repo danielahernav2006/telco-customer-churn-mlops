@@ -1,0 +1,19 @@
+title: "Predicción de Churn en Telecomunicaciones"
+author: "Daniela Hernández, Mariangel Yepes, Valeria Incer y Alejandra Meneses"
+logo: images/LOGOUNINORTE.png
+
+execute:
+  execute_notebooks: "off"
+
+html:
+  use_repository_button: true
+  use_issues_button: false
+  use_edit_page_button: false
+
+repository:
+  url: "https://github.com/danielahernav2006/telco-customer-churn-mlops.git"
+  branch: main
+  path_to_book: book
+
+launch_buttons:
+  notebook_interface: "jupyterlab"
